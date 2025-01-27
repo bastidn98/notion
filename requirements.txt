@@ -1,0 +1,9 @@
+# Runtime dependencies
+notion-client>=1.0.0
+typing-extensions>=4.0.0
+python-dotenv>=1.0.1
+
+# Development dependencies
+pytest>=7.0.0
+black>=22.0.0
+flake8>=4.0.0 
