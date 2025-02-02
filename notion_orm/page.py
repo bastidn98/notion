@@ -28,7 +28,7 @@ class NotionPage:
             raise ValueError(f"Invalid properties: {', '.join(invalid_props)}")
             
         notion_properties = {
-            name: self.database.properties[name].to_notion(value)
+            name: self.database.properties[name].__class__.to_notion(value)
             for name, value in properties.items()
         }
         
@@ -48,4 +48,12 @@ class NotionPage:
     def refresh(self):
         """Refresh the page data from the database"""
         self._raw_data = self.database.client.pages.retrieve(page_id=self.id)
-        self._load_properties() 
+        self._load_properties()
+
+    def __repr__(self) -> str:
+        title = getattr(self, 'Title', 'Untitled')
+        return f"NotionPage(id={self.id!r}, title={title!r})"
+    
+    def __str__(self) -> str:
+        title = getattr(self, 'Title', 'Untitled')
+        return f"Page: {title} (ID: {self.id})" 

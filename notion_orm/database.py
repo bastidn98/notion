@@ -3,7 +3,7 @@ from typing import Dict, List, Type, Any, Optional
 from notion_client import Client
 
 from .page import NotionPage
-from .properties import property_factory, NotionProperty
+from .properties import property_factory, NotionProperty, UnsupportedProperty
 
 
 class NotionDatabase:
@@ -17,12 +17,19 @@ class NotionDatabase:
         db_info = self.client.databases.retrieve(database_id=self.database_id)
         props = {}
         for prop_name, prop_info in db_info.get("properties", {}).items():
-            props[prop_name] = property_factory(prop_info["type"], prop_name)
+            try:
+                props[prop_name] = property_factory(prop_info["type"], prop_name)
+            except Exception as e:
+                print(f"Warning: Failed to create property {prop_name}: {e}")
+                props[prop_name] = UnsupportedProperty(prop_name)
         return props
 
     def query(self, **filters) -> List[NotionPage]:
         """Query the database with filters"""
-        results = self.client.databases.query(database_id=self.database_id, filter=self._build_filter(filters))
+        if filters:
+            results = self.client.databases.query(database_id=self.database_id, filter=self._build_filter(filters))
+        else:
+            results = self.client.databases.query(database_id=self.database_id)
         return [NotionPage(self, page) for page in results["results"]]
 
     def _build_filter(self, filters: dict) -> dict:
@@ -42,7 +49,7 @@ class NotionDatabase:
     def update_page(self, page_id: str, properties: Dict[str, Any]) -> Dict[str, Any]:
         """Update a page's properties"""
         notion_properties = {
-            prop_name: self.properties[prop_name].to_notion(value)
+            prop_name: self.properties[prop_name].__class__.to_notion(value)
             for prop_name, value in properties.items()
             if prop_name in self.properties
         }
@@ -54,7 +61,7 @@ class NotionDatabase:
     def create_page(self, properties: Dict[str, Any]) -> Dict[str, Any]:
         """Create a new page in the database"""
         notion_properties = {
-            prop_name: self.properties[prop_name].to_notion(value)
+            prop_name: self.properties[prop_name].__class__.to_notion(value)
             for prop_name, value in properties.items()
             if prop_name in self.properties
         }
