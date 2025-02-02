@@ -1,35 +1,29 @@
-from typing import Dict, List
+from typing import Dict, List, Type, Any, Optional
 
 from notion_client import Client
 
 from .page import NotionPage
-from .properties import PropertyType, property_factory
+from .properties import property_factory, NotionProperty
 
 
 class NotionDatabase:
     def __init__(self, notion_client: Client, database_id: str):
         self.client = notion_client
         self.database_id = database_id
-        self.properties: Dict[str, PropertyType] = {}
-        self._fetch_schema()
+        self.properties: Dict[str, NotionProperty] = self.get_schema()
 
-    def _fetch_schema(self):
-        """Fetches and caches the database schema from Notion"""
-        database = self.client.databases.retrieve(self.database_id)
-        self.properties = {name: property_factory(prop_data) for name, prop_data in database["properties"].items()}
+    def get_schema(self) -> Dict[str, NotionProperty]:
+        """Load the database schema and create property mappings"""
+        db_info = self.client.databases.retrieve(database_id=self.database_id)
+        props = {}
+        for prop_name, prop_info in db_info.get("properties", {}).items():
+            props[prop_name] = property_factory(prop_info["type"], prop_name)
+        return props
 
     def query(self, **filters) -> List[NotionPage]:
         """Query the database with filters"""
         results = self.client.databases.query(database_id=self.database_id, filter=self._build_filter(filters))
         return [NotionPage(self, page) for page in results["results"]]
-
-    def create_page(self, **properties) -> NotionPage:
-        """Create a new page in the database"""
-        # Convert Python values to Notion property values
-        notion_properties = {name: self.properties[name].to_notion(value) for name, value in properties.items()}
-
-        page = self.client.pages.create(parent={"database_id": self.database_id}, properties=notion_properties)
-        return NotionPage(self, page)
 
     def _build_filter(self, filters: dict) -> dict:
         """Convert Python-style filters to Notion API filter format"""
@@ -39,3 +33,32 @@ class NotionDatabase:
             notion_filters.append({"property": prop, "equals": value})
 
         return {"and": notion_filters} if len(notion_filters) > 1 else notion_filters[0] if notion_filters else {}
+
+    def get_page(self, page_id: str) -> NotionPage:
+        """Get a page and return it as a NotionPage object"""
+        page = self.client.pages.retrieve(page_id=page_id)
+        return NotionPage(self, page)
+
+    def update_page(self, page_id: str, properties: Dict[str, Any]) -> Dict[str, Any]:
+        """Update a page's properties"""
+        notion_properties = {
+            prop_name: self.properties[prop_name].to_notion(value)
+            for prop_name, value in properties.items()
+            if prop_name in self.properties
+        }
+        return self.client.pages.update(
+            page_id=page_id,
+            properties=notion_properties
+        )
+
+    def create_page(self, properties: Dict[str, Any]) -> Dict[str, Any]:
+        """Create a new page in the database"""
+        notion_properties = {
+            prop_name: self.properties[prop_name].to_notion(value)
+            for prop_name, value in properties.items()
+            if prop_name in self.properties
+        }
+        return self.client.pages.create(
+            parent={"database_id": self.database_id},
+            properties=notion_properties
+        )
